@@ -1,47 +1,29 @@
-"""This module contains various functions for Hawkes Processes and visualization.
+"""This module provides functions for analyzing and simulating Hawkes processes, 
+as well as performing maximum likelihood estimation (MLE) to estimate the parameters of the intensity function.
 
 Functions:
-- convert_date_to_numberB: Convert dates to numbers.
-- distribute: Distribute cases evenly within the same day.
-- binary_search: Perform binary search to find the right position for insertion.
-- _history_n: Reduce computations by considering event times within a certain number of days.
-- intensity_lambda_dep: Compute the intensity function with depth.
-- _integral_term: Calculate the integral term of the log-likelihood function.
-- _log_term: Calculate the logarithmic term of the log-likelihood function.
-- _llh_neg: Calculate the negative log-likelihood function.
-- MLE: Minimize the negative log-likelihood function.
-- hawkes_prediction: Predict future events using the Hawkes process.
-- prediction: Generate event predictions using the Hawkes process.
-- QQ_plot: Generate a Q-Q plot to compare observed and theoretical quantiles.
-- KS_plot: Plot the Kolmogorov-Smirnov (KS) plot.
+- convert_date_to_numberB: Converts dates to numbers.
+- convert_date_to_numberC: Converts dates to numbers.
+- distribute: Distributes cases in the same day evenly.
+- binary_search: Finds the right position for insertion.
+- intensity_lambda_dep: Calculates the intensity function with depth.
+- _integral_term: Calculates the integral term of the log-likelihood function.
+- _log_term: Calculates the logarithmic term of the log-likelihood function.
+- _llh_neg: Calculates the negative log-likelihood function.
+- MLE: Performs maximum likelihood estimation to find optimal parameters.
+- MLE_de: Performs differential evolution to find optimal parameters.
+- simulate_hawkes_process: Simulates a Hawkes process.
+- simulate_cluster_structure: Simulates a cluster structure.
+- hawkes_prediction: Uses Hawkes processes to predict future events.
+- prediction: Generates event predictions using the Hawkes process.
+- QQ_plot: Generates a Q-Q plot to compare observed and theoretical quantiles.
+- KS_plot: Plots the Kolmogorov-Smirnov (KS) plot.
+- intensity_constructor: Constructs the intensity function for optimization.
+- bounds: Gets the bounds for the parameters.
+- newton_raphson_method: Performs Newton-Raphson method for optimization.
 
-Usage Example:
--------------
-# Importing the module
-from your_module_name import *
+Note: This module requires the numpy, datetime, matplotlib.pyplot, collections, scipy.integrate, and scipy.optimize libraries.
 
-# Converting a date to a number
-date = "15/06/2022"
-number = convert_date_to_numberB(date)
-
-# Distributing event times
-data = [10, 11, 11, 12, 12, 12]
-distributed_data = distribute(data)
-
-# Calculating the intensity function
-intensity = intensity_lambda_dep(5.0, event_times, depth=30, kernel=kernel_func, base=base_func)
-
-# Maximize the log-likelihood
-result = MLE(intensity_func, event_times, initial_params)
-
-# Generating event predictions
-prediction(intensity_func, history_events, T_i, p=0.5, n=50, color="b", alpha=0.5)
-
-# Creating a Q-Q plot
-QQ_plot(observed, theoretical)
-
-# Creating a KS plot
-KS_plot(samples, event_times, color="r", alpha=0.2)
 """
 
 
@@ -53,7 +35,7 @@ import scipy.integrate as spi
 import scipy.optimize as opt
 
 
-def convert_date_to_numberB(date, earliest_date="31/12/2010"):
+def convert_date_to_numberB(date, earliest_date="31/12/2013"):
     """convert dates to numbers
 
     Args:
@@ -66,7 +48,6 @@ def convert_date_to_numberB(date, earliest_date="31/12/2010"):
     date_format = "%d/%m/%Y"
     delta = datetime.strptime(date, date_format) - datetime.strptime(earliest_date, date_format)
     return delta.days
-
 
 def convert_date_to_numberC(date, earliest_date="2013-12-25"):
     """convert dates to numbers
@@ -81,7 +62,6 @@ def convert_date_to_numberC(date, earliest_date="2013-12-25"):
     date_format = "%Y-%m-%d" 
     delta = datetime.strptime(date, date_format) - datetime.strptime(earliest_date, date_format)
     return delta.days
-
 
 def distribute(data):
     """Distribute cases in the same day evenly
@@ -98,13 +78,20 @@ def distribute(data):
     for e in sorted_elements:
         count = counter[e]
         for n in range(count):
-            time_ticks.append(int(e)-1+(n+1)/count)
+            time_ticks.append(int(e)+(n+1)/count)
 
     return time_ticks
 
-
 def binary_search(sorted_list, new):
-    """Find the right position for a insertion"""
+    """Find the right position for insertion.
+
+    Args:
+        sorted_list (List): A sorted list.
+        new: The element to be inserted.
+
+    Returns:
+        int: The index where the element should be inserted.
+    """
     left = 0
     right = len(sorted_list) - 1
 
@@ -120,16 +107,17 @@ def binary_search(sorted_list, new):
     return left
 
 def intensity_lambda_dep(t, event_times, depth=None, kernel=None, base=None):
-    """The intensity function (lambda) with depth.
+    """Compute the intensity function lambda(t) with depth.
 
     Args:
-        t (float): Time
-        event_times (array-like): Event times
-        depth (int, optional): Number of days to consider. Defaults to 30.
-        **kwargs: Additional keyword arguments for phi and lambda0
+        t (float): Time.
+        event_times (array-like): Event times.
+        depth (int, optional): Number of days to consider. Defaults to None.
+        kernel (function, optional): Kernel function. Defaults to None.
+        base (function, optional): Base function. Defaults to None.
 
     Returns:
-        float: Intensity value
+        float: Intensity value.
     """
     self_exciting_term = 0
     n = binary_search(event_times, t)
@@ -149,13 +137,13 @@ def _integral_term(paras, intensity_func, event_times, model=None):
     """Calculate the integral term of the log-likelihood function.
 
     Args:
-        x (tuple): Parameters for the intensity function.
-        intensity_func (Function): Intensity function.
-        time_ticks_m_small (list): List of time ticks.
+        paras (tuple): Parameters for the intensity function.
+        intensity_func (function): Intensity function.
+        event_times (list): List of event times.
+        model (str, optional): Model name. Defaults to None.
 
     Returns:
         float: Integral term.
-
     """
     if model == "constexp":
         alpha, delta, mu = paras
@@ -167,7 +155,7 @@ def _integral_term(paras, intensity_func, event_times, model=None):
             integral -= np.exp(-delta * (T-event_times[ind]))
         return integral
     
-    if model == "HN":
+    elif model == "HN":
         alpha, delta, mu, N = paras
         m = alpha/delta
         t = event_times
@@ -199,9 +187,11 @@ def _log_term(paras, intensity_func, event_times, model=None, depth=None):
     """Calculate the logarithmic term of the log-likelihood function.
 
     Args:
-        x (tuple): Parameters for the intensity function.
+        paras (tuple): Parameters for the intensity function.
         intensity_func (function): Intensity function.
-        time_ticks_m_small (list): List of time ticks.
+        event_times (list): List of event times.
+        model (str, optional): Model name. Defaults to None.
+        depth (int, optional): Number of days to consider. Defaults to None.
 
     Returns:
         float: Logarithmic term.
@@ -251,59 +241,62 @@ def _log_term(paras, intensity_func, event_times, model=None, depth=None):
         return res
 
 def _llh_neg(paras, intensity_func, event_times, model=None):
-    """Calculate the negative log-likelihood function so that minimize maximizes the llh.
+    """Calculate the negative log-likelihood function.
 
     Args:
-        x (tuple): Parameters for the intensity function.
-        **kwargs: Additional keyword arguments.
-            intensity_func (function): Intensity function.
-            time_ticks_m_small (list): List of time ticks.
+        paras (tuple): Parameters for the intensity function.
+        intensity_func (function): Intensity function.
+        event_times (list): List of event times.
+        model (str, optional): Model name. Defaults to None.
 
     Returns:
         float: Negative log-likelihood.
-
     """
     return _integral_term(paras, intensity_func, event_times, model=model) - _log_term(paras, intensity_func, event_times, model=model)
 
 def MLE(intensity_func, event_times, initial_params, model=None , **kwargs):
-    """Minimize the negative log-likelihood function.
+    """Perform maximum likelihood estimation (MLE) to find the optimal parameters.
 
     Args:
-        intensity_func (Function): Intensity function.
+        intensity_func (function): Intensity function.
         event_times (list): List of event times.
         initial_params (tuple): Initial parameters for the intensity function.
-        **kwargs: Additional keyword arguments to be passed to the log-likelihood function.
+        model (str, optional): Model name. Defaults to None.
+        **kwargs: Additional keyword arguments for the optimization.
 
     Returns:
         OptimizeResult: The optimization result.
-
     """
-    
     result = opt.minimize(lambda x: _llh_neg(x, intensity_func, event_times, model=model),
                           initial_params, **kwargs)
     return result
 
 def MLE_de(intensity_func, event_times, model=None, **kwargs):
-    """Minimize the negative log-likelihood function.
+    """Perform differential evolution (DE) to find the optimal parameters.
 
     Args:
-        intensity_func (Function): Intensity function.
+        intensity_func (function): Intensity function.
         event_times (list): List of event times.
-        initial_params (tuple): Initial parameters for the intensity function.
-        **kwargs: Additional keyword arguments to be passed to the log-likelihood function.
+        model (str, optional): Model name. Defaults to None.
+        **kwargs: Additional keyword arguments for the optimization.
 
     Returns:
         OptimizeResult: The optimization result.
-
     """
-    
     result = opt.differential_evolution(lambda x: _llh_neg(x, intensity_func, event_times, model=model), **kwargs)
     return result
 
 def simulate_hawkes_process(intensity_func, history_events, T): 
-    """ Only works for monotonically decreasing kernels
-    """
+    """Simulate a Hawkes process, only works for monotonically decreasing kernels.
 
+    Args:
+        intensity_func (function): Intensity function.
+        history_events (list): List of historical event times.
+        T (float): Time duration to simulate.
+
+    Returns:
+        List: Simulated event times.
+    """
     simulated_events = history_events.copy()
     
     if history_events:
@@ -312,56 +305,82 @@ def simulate_hawkes_process(intensity_func, history_events, T):
         T_i = 0
     
     while T_i < T:
-        lambda_star = intensity_func(T_i+0.000000001, simulated_events)
+        lambda_star = intensity_func(T_i+1e-10, simulated_events)
         u = np.random.uniform(0, 1)
         tau = -np.log(u) / lambda_star
         T_i += tau
         s = np.random.uniform(0, 1)
 
-        if s <= (intensity_func(T_i+0.000000001, simulated_events)/ lambda_star):
+        if s <= (intensity_func(T_i+1e-10, simulated_events)/ lambda_star):
             simulated_events.append(T_i)
-    return simulated_events
+    return simulated_events[:-1]
 
-def hawkes_prediction(intensity_func, history_events, p=0.2):
-    """Use Hawkes Processes to predict time of future events by thinning algorithm
+def simulate_cluster_structure(kernel, base, history_event, T):
+    """Simulate a cluster structure with branching algorithm.
 
     Args:
-        intensity_func (func): the intensity function 
-        p (float): proportion of predictions to history events
-        history_events (Iterable(floats)): history events for the prediction
+        kernel (function): Kernel function.
+        base (function): Base function.
+        history_event (list): List of historical event times.
+        T (float): Time duration to simulate.
 
     Returns:
-        List(float): prediction 
+        List: Simulated event times.
+    """
+    rate = base.c
+    
+    if history_event:
+        T_i = history_event[-1]
+        T_0 = history_event[-1]
+    else:
+        T_i = 0
+        T_0 = 0
+    
+    event_times = history_event.copy()
+    while T_i < T:
+        T_i += np.random.exponential(1/rate)
+        event_times.append(T_i)
+    G = event_times.copy()
+    m = kernel.m()
+    while len(G) > 0:
+        inter_arrival_times = np.array([])
+        for t in G:
+            C = np.random.poisson(m)
+            inter_arrival_times = np.append(inter_arrival_times, np.random.exponential(m, C) + t)
+        G = [t for t in inter_arrival_times if (t <= T and t >= T_0)]
+        event_times += G
+    return sorted(list(set(event_times)))[:-1]
+
+def hawkes_prediction(intensity_func, history_events, p=0.2):
+    """Use Hawkes Processes to predict time of future events by thinning algorithm.
+
+    Args:
+        intensity_func (function): Intensity function.
+        history_events (iterable): Historical event times for the prediction.
+        p (float): Proportion of predictions to history events.
+
+    Returns:
+        List: Predicted event times.
     """
     T = history_events[-1] * (1 + p)
-    return simulate_hawkes_process(intensity_func, history_events, T)
+    n = len(history_events)
+    return simulate_hawkes_process(intensity_func, history_events, T)[n:]
 
-def prediction(intensity_func, history_events, T_i, p=0.5, n=50, **kwargs):
+def prediction(intensity_func, history_events, p=0.5, n=50, **kwargs):
     """Generate event predictions using the Hawkes process.
 
     Args:
         intensity_func (function): Intensity function.
         history_events (list): List of historical event times.
-        T_i (float): Time interval.
         p (float, optional): Extra time to predict beyond T_i as a fraction of T_i. Defaults to 0.5.
         n (int, optional): Number of predictions to generate. Defaults to 50.
         **kwargs: Additional keyword arguments for customizing the plot, including color and alpha.
 
     Returns:
         None
-
-    Raises:
-        ValueError: If T_i is not a positive number.
-        ValueError: If p is not in the range of [0, 1].
-
     """
-    if T_i <= 0:
-        raise ValueError("T_i must be a positive number.")
-    if not 0 <= p <= 1:
-        raise ValueError("p must be in the range of [0, 1].")
-
+    T_i = history_events[-1]
     T = T_i * (1 + p)
-    N1 = binary_search(history_events, T)
     N0 = binary_search(history_events, T_i)
 
     color = kwargs.pop("color", None) if kwargs is not None else "k"
@@ -372,41 +391,17 @@ def prediction(intensity_func, history_events, T_i, p=0.5, n=50, **kwargs):
         N = len(pred)
         plt.plot(pred, np.arange(N + N0)[-N:], color=color, alpha=alpha, **kwargs)
 
-    plt.plot(history_events[:N1], range(N1), label="data", color="r")
-    plt.xlabel("Time")
-    plt.ylabel("N(t)")
-    plt.legend()
-
-    plt.show()
-    
-def simulate_cluster_structure(kernel, base, T):
-    rate = base.c
-    T_i = 0
-    G = []
-    while T_i < T:
-        T_i += np.random.exponential(1/rate)
-        G.append(T_i)
-    event_times = G.copy()
-    m = kernel.m()
-    while len(G) > 0:
-        inter_arrival_times = np.array([])
-        for t in G:
-            C = np.random.poisson(m)
-            inter_arrival_times = np.append(inter_arrival_times, np.random.exponential(m, C) + t)
-        G = [t for t in inter_arrival_times if t < T]
-        event_times += G
-    return sorted(list(set(event_times)))
+    plt.plot(history_events, range(len(history_events)), label="data", color="r")
 
 def QQ_plot(observed, theoretical):
     """Generate a Q-Q plot to compare observed quantiles with theoretical quantiles.
 
     Args:
-        observed (Iterable): Array of observed quantiles.
-        theoretical (Iterable): Array of theoretical quantiles.
+        observed (iterable): Array of observed quantiles.
+        theoretical (iterable): Array of theoretical quantiles.
 
     Returns:
         None
-
     """
     plt.scatter(theoretical, observed, marker=".", color="k")
     plt.plot([np.min(theoretical), np.max(theoretical)],
@@ -432,7 +427,6 @@ def KS_plot(samples, event_times, **kwargs):
     Returns:
         None
     """
-    
     color = kwargs.get("color", "k") if kwargs is not None else "k"
     alpha = kwargs.get("alpha", 0.15) if kwargs is not None else 0.15
     N = len(samples)
@@ -448,6 +442,20 @@ def KS_plot(samples, event_times, **kwargs):
     plt.show()
 
 def intensity_constructor(t, paras, event_times, kernel, base, SIR=False, depth=None):
+    """Construct the intensity function for optimization.
+
+    Args:
+        t (float): Time.
+        paras (tuple): Parameters for the intensity function.
+        event_times (list): List of event times.
+        kernel (class): Kernel class.
+        base (class): Base class.
+        SIR (bool, optional): Flag indicating if SIR model is used. Defaults to False.
+        depth (int, optional): Number of days to consider. Defaults to None.
+
+    Returns:
+        float: Intensity value.
+    """
     kn = kernel().n
     bn = base().n
     kernel_func = kernel(*paras[:kn])
@@ -459,49 +467,49 @@ def intensity_constructor(t, paras, event_times, kernel, base, SIR=False, depth=
         return intensity_lambda_dep(t, event_times, depth=depth, kernel=kernel_func, base=base_func)
 
 def bounds(kernel, base):
+    """Get the bounds for the parameters.
+
+    Args:
+        kernel (class): Kernel class.
+        base (class): Base class.
+
+    Returns:
+        tuple: Lower and upper bounds for the parameters.
+    """
     return kernel().bounds + base().bounds
 
-def constraints(kernel, base):
-    pass
-
 def newton_raphson_method(f, grad, hess, x0, bounds=None, max_iter=100, tol=1e-6):
+    """Perform Newton-Raphson method for optimization.
+
+    Args:
+        f (function): Objective function.
+        grad (function): Gradient of the objective function.
+        hess (function): Hessian of the objective function.
+        x0 (ndarray): Initial solution.
+        bounds (tuple, optional): Lower and upper bounds for the solution. Defaults to None.
+        max_iter (int, optional): Maximum number of iterations. Defaults to 100.
+        tol (float, optional): Tolerance for convergence. Defaults to 1e-6.
+
+    Returns:
+        tuple: Optimal solution and convergence status.
+    """
     x = x0
     converged = False
 
     for _ in range(max_iter):
-        # Evaluate the function and its gradient
         f_val = f(x)
         g = grad(x)
-
-        # Check if the solution satisfies the tolerance
         if np.abs(f_val) < tol:
             converged = True
             break
-
-        # Compute the Hessian matrix
         H = hess(x)
-
-        # Solve the Newton-Raphson update equation
         delta_x = np.linalg.solve(H, -g)
-
-        # Update the solution
         x_new = x + delta_x
-
-        # Apply bounds to the updated solution
         if bounds is not None:
             x_new = np.clip(x_new, bounds[0], bounds[1])
-
-        # Check if the solution has converged
         if np.allclose(x, x_new, rtol=tol, atol=tol):
             converged = True
             break
-
-        # Update the solution for the next iteration
         x = x_new
 
     return x, converged
-
-
-
-
-
